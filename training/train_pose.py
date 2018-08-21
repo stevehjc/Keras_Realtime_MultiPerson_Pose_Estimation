@@ -17,7 +17,7 @@ from training.optimizers import MultiSGD
 from training.dataset import get_dataflow, batch_dataflow
 
 
-batch_size = 10
+batch_size = 4 #10
 base_lr = 4e-5 # 2e-5
 momentum = 0.9
 weight_decay = 5e-4
@@ -72,7 +72,7 @@ def restore_weights(weights_best_file, model):
     else:
         print("Loading vgg19 weights...")
 
-        vgg_model = VGG19(include_top=False, weights='imagenet')
+        vgg_model = VGG19(include_top=False, weights='imagenet') #keras will automatically download VGG19 weights
 
         for layer in model.layers:
             if layer.name in from_vgg:
@@ -184,8 +184,10 @@ if __name__ == '__main__':
     # prepare generators
 
     curr_dir = os.path.dirname(__file__)
-    annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_train2017.json')
-    img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/train2017/'))
+    # annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_train2017.json') 
+    # img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/train2017/'))
+    annot_path="/media/han/E/mWork/datasets/COCO2014/annotations/person_keypoints_train2014.json"
+    img_dir='/media/han/E/mWork/datasets/COCO2014/train2014/'
 
     # get dataflow of samples
 

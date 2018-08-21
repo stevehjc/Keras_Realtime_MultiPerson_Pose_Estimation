@@ -1,3 +1,4 @@
+#encoding=utf-8
 import os
 import numpy as np
 
@@ -22,7 +23,7 @@ class JointsLoader:
 
     num_joints = 18
 
-    num_joints_and_bkg = num_joints + 1
+    num_joints_and_bkg = num_joints + 1  #增加背景类别
 
     num_connections = 19
 
@@ -33,6 +34,7 @@ class JointsLoader:
         'Nose','Neck','RShoulder','RElbow','RWrist','LShoulder','LElbow','LWrist',
         'RHip','RKnee','RAnkle','LHip','LKnee','LAnkle','REye','LEye','REar','LEar']
 
+    #关键点连接方式
     joint_pairs = list(zip(
         [1, 8, 9, 1, 11, 12, 1, 2, 3, 2, 1, 5, 6, 5, 1, 0, 0, 14, 15],
         [8, 9, 10, 11, 12, 13, 2, 3, 4, 16, 5, 6, 7, 17, 0, 14, 15, 16, 17]))

@@ -1,3 +1,4 @@
+#encoding=utf-8
 from keras.models import Model
 from keras.layers.merge import Concatenate
 from keras.layers import Activation, Input, Lambda
@@ -6,6 +7,8 @@ from keras.layers.pooling import MaxPooling2D
 from keras.layers.merge import Multiply
 from keras.regularizers import l2
 from keras.initializers import random_normal,constant
+import tensorflow as tf
+from keras import backend as K
 
 
 def relu(x): return Activation('relu')(x)
@@ -29,6 +32,10 @@ def pooling(x, ks, st, name):
 
 
 def vgg_block(x, weight_decay):
+    '''
+    vgg19模型的前10层，再加两层卷积
+    网络中存在3个最大池化层，因此网络输出相比输入缩小了8倍
+    '''
     # Block 1
     x = conv(x, 64, 3, "conv1_1", (weight_decay, 0))
     x = relu(x)
@@ -85,6 +92,11 @@ def stage1_block(x, num_p, branch, weight_decay):
 
 
 def stageT_block(x, num_p, stage, branch, weight_decay):
+    '''
+    x: 输入特征图
+    num_p:最终输出的特征图数量
+    stage,branch:当前编号
+    '''
     # Block 1
     x = conv(x, 128, 7, "Mconv1_stage%d_L%d" % (stage, branch), (weight_decay, 0))
     x = relu(x)
@@ -173,7 +185,23 @@ def get_training_model(weight_decay):
     return model
 
 
-def get_testing_model():
+def get_testing_model(GPU=True):
+
+    #GPU CPU 选择
+    num_cores = 4 #并行处理核心数
+    if GPU:
+        num_GPU = 1
+        num_CPU = 1
+    if not GPU:
+        num_CPU = 1
+        num_GPU = 0
+
+    config = tf.ConfigProto(intra_op_parallelism_threads=num_cores, \
+                            inter_op_parallelism_threads=num_cores, allow_soft_placement=True, \
+                            device_count={'CPU': num_CPU, 'GPU': num_GPU})
+    session = tf.Session(config=config)
+    K.set_session(session)
+
     stages = 6
     np_branch1 = 38
     np_branch2 = 19
