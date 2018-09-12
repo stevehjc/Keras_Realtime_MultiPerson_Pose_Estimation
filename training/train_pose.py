@@ -1,9 +1,10 @@
+# encoding=utf-8
 import math
 import os
 import re
 import sys
 import pandas
-from functools import partial
+from functools import partial #用于部分函数应用程序，它“冻结”函数的参数和/或关键字的某些部分，从而产生具有简化签名的新对象。
 
 import keras.backend as K
 from keras.applications.vgg19 import VGG19
@@ -18,19 +19,19 @@ from training.dataset import get_dataflow, batch_dataflow
 
 
 batch_size = 4 #10
-base_lr = 4e-5 # 2e-5
+base_lr = 4e-5 # 2e-5 #初始学习率，之后按照lr_policy衰减
 momentum = 0.9
-weight_decay = 5e-4
+weight_decay = 5e-4 #卷积层权重正则化参数
 lr_policy =  "step"
 gamma = 0.333
-stepsize = 136106 #68053   // after each stepsize iterations update learning rate: lr=lr*gamma
-max_iter = 200000 # 600000
+stepsize = 68053 #136106 #68053   // after each stepsize iterations update learning rate: lr=lr*gamma
+max_iter = 20 # 600000
 
-weights_best_file = "weights.best.h5"
-training_log = "training.csv"
-logs_dir = "./logs"
+weights_best_file = "weights.best.h5" #默认加载上一次训练的结果，如果不存在，则利用keras自动下载VGG19预训练模型
+training_log = "training.csv" #保存每个epochs训练结束后的loss，包括多个stages
+logs_dir = "./logs" #tensorboard logdir
 
-from_vgg = {
+from_vgg = { #VGG19的前10层的layer_name,load权重时按照名称加载
     'conv1_1': 'block1_conv1',
     'conv1_2': 'block1_conv2',
     'conv2_1': 'block2_conv1',
@@ -125,8 +126,8 @@ def get_loss_funcs():
     https://github.com/BVLC/caffe/blob/master/src/caffe/layers/euclidean_loss_layer.cpp
     :return:
     """
-    def _eucl_loss(x, y):
-        return K.sum(K.square(x - y)) / batch_size / 2
+    def _eucl_loss(x, y): #keras也有默认的平均平方差损失函数
+        return K.sum(K.square(x - y)) / batch_size / 2 #除以batch_size，即每张图片的损失；x，y是batch中所有
 
     losses = {}
     losses["weight_stage1_L1"] = _eucl_loss
@@ -174,39 +175,35 @@ def gen(df):
 if __name__ == '__main__':
 
     # get the model
-
     model = get_training_model(weight_decay)
 
     # restore weights
-
     last_epoch = restore_weights(weights_best_file, model)
 
-    # prepare generators
+    #输出模型结果
+    # model.summary()
 
-    curr_dir = os.path.dirname(__file__)
+    # prepare generators
+    # curr_dir = os.path.dirname(__file__)
     # annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_train2017.json') 
     # img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/train2017/'))
-    annot_path="/media/han/E/mWork/datasets/COCO2014/annotations/person_keypoints_train2014.json"
-    img_dir='/media/han/E/mWork/datasets/COCO2014/train2014/'
+    annot_path="/media/han/E/mWork/datasets/COCO2017/annotations/person_keypoints_val2017.json"
+    img_dir='/media/han/E/mWork/datasets/COCO2017/val2017/'
 
     # get dataflow of samples
-
-    df = get_dataflow(
+    df = get_dataflow(  #数据集读取和处理（mask,augment,heatmap,paf等）多线程
         annot_path=annot_path,
         img_dir=img_dir)
     train_samples = df.size()
 
     # get generator of batches
-
     batch_df = batch_dataflow(df, batch_size)
     train_gen = gen(batch_df)
 
     # setup lr multipliers for conv layers
-
     lr_multipliers = get_lr_multipliers(model)
 
     # configure callbacks
-
     iterations_per_epoch = train_samples // batch_size
     _step_decay = partial(step_decay,
                           iterations_per_epoch=iterations_per_epoch
@@ -214,7 +211,7 @@ if __name__ == '__main__':
     lrate = LearningRateScheduler(_step_decay)
     checkpoint = ModelCheckpoint(weights_best_file, monitor='loss',
                                  verbose=0, save_best_only=False,
-                                 save_weights_only=True, mode='min', period=1)
+                                 save_weights_only=True, mode='min', period=1) #每个epochs都记录
     csv_logger = CSVLogger(training_log, append=True)
     tb = TensorBoard(log_dir=logs_dir, histogram_freq=0, write_graph=True,
                      write_images=False)
@@ -222,13 +219,17 @@ if __name__ == '__main__':
     callbacks_list = [lrate, checkpoint, csv_logger, tb]
 
     # sgd optimizer with lr multipliers
-
     multisgd = MultiSGD(lr=base_lr, momentum=momentum, decay=0.0,
                         nesterov=False, lr_mult=lr_multipliers)
 
     # start training
-
     loss_funcs = get_loss_funcs()
+
+    # multi_gpu
+    if False:
+        from keras.utils import multi_gpu_model
+        model = multi_gpu_model(model, gpus=1) 
+
     model.compile(loss=loss_funcs, optimizer=multisgd, metrics=["accuracy"])
     model.fit_generator(train_gen,
                         steps_per_epoch=train_samples // batch_size,

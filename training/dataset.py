@@ -1,3 +1,4 @@
+#encoding=utf-8
 import os
 import cv2
 import numpy as np
@@ -14,7 +15,7 @@ from training.dataflow import CocoDataFlow, JointsLoader
 from training.label_maps import create_heatmap, create_paf
 
 
-ALL_PAF_MASK = np.repeat(
+ALL_PAF_MASK = np.repeat( #复制数组,axis表示第几个轴扩充；这里将[46,46,1]->[46.46.38]
     np.ones((46, 46, 1), dtype=np.uint8), 38, axis=2)
 
 ALL_HEATMAP_MASK = np.repeat(
@@ -79,7 +80,7 @@ def gen_mask(components):
     return components
 
 
-def augment(components):
+def augment(components): #数据增强是随机的吗？是每个样本都处理还是随机处理，增强方法右四种，用的是哪一个？？
     """
     Augmenting of images.
 
@@ -166,8 +167,10 @@ def build_sample(components):
         mask_paf = create_all_mask(meta.mask, 38, stride=8)
         mask_heatmap = create_all_mask(meta.mask, 19, stride=8)
 
+    # print("hdebug:meta.aug_joints:",len(meta.aug_joints[0]))
+    # print(type(JointsLoader.num_joints_and_bkg))
     heatmap = create_heatmap(JointsLoader.num_joints_and_bkg, 46, 46,
-                             meta.aug_joints, 7.0, stride=8)
+                             meta.aug_joints, 7.0, stride=8)                             
 
     pafmap = create_paf(JointsLoader.num_connections, 46, 46,
                         meta.aug_joints, 1, stride=8)
@@ -226,17 +229,20 @@ if __name__ == '__main__':
     """
     batch_size = 10
     curr_dir = os.path.dirname(__file__)
-    annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_val2017.json')
-    img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/val2017/'))
-    df = CocoDataFlow((368, 368), annot_path, img_dir)#, select_ids=[1000])
+    # annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_val2017.json')
+    # img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/val2017/'))
+    annot_path="/media/han/E/mWork/datasets/COCO2017/annotations/person_keypoints_val2017.json"
+    img_dir='/media/han/E/mWork/datasets/COCO2017/val2017/'
+    df = CocoDataFlow((368, 368), annot_path, img_dir) #, select_ids=[1000])
     df.prepare()
     df = MapData(df, read_img)
     df = MapData(df, gen_mask)
-    df = MapData(df, augment)
+    df = MapData(df, augment) #数据增强
     df = MapData(df, apply_mask)
-    df = MapData(df, build_sample)
+    df = MapData(df, build_sample)  # 创建样本，包括生成heatmpa paf等
     df = PrefetchDataZMQ(df, nr_proc=4)
     df = BatchData(df, batch_size, use_list=False)
+    # hdebug:为什么重复x[3],x[4]??
     df = MapData(df, lambda x: (
         [x[0], x[1], x[2]],
         [x[3], x[4], x[3], x[4], x[3], x[4], x[3], x[4], x[3], x[4], x[3], x[4]])

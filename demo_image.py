@@ -27,7 +27,7 @@ paf序号：26      28    30     32     34      36
 '''
 
 # find connection in the specified sequence, center 29 is in the position 15
-#不同的limbs,19种，也就是19种连线方式；对应网络设计中的19和38
+#不同的limbs,19种，也就是19种连线方式；对应网络设计中的19和38；这个顺序是计算、绘图的顺序，不是paf存储顺序
 limbSeq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
            [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
            [1, 16], [16, 18], [3, 17], [6, 18]]
@@ -63,9 +63,10 @@ def process (input_image, params, model_params):
                                                           model_params['padValue'])
 
         input_img = np.transpose(np.float32(imageToTest_padded[:,:,:,np.newaxis]), (3,0,1,2)) # required shape (1, width, height, channels)
-
+        tic=time.time()
         output_blobs = model.predict(input_img)
-
+        toc=time.time()
+        print("------",toc-tic)
         # extract outputs, resize, and remove padding
         heatmap = np.squeeze(output_blobs[1])  # output 1 is heatmaps
         heatmap = cv2.resize(heatmap, (0, 0), fx=model_params['stride'], fy=model_params['stride'],  # 上采样8倍；因为网络中pool导致输出比输入缩小了8倍
@@ -84,49 +85,49 @@ def process (input_image, params, model_params):
         paf_avg = paf_avg + paf / len(multiplier)
 
     all_peaks = []
-    peak_counter = 0
+    peak_counter = 0 #峰值点编号，计数
 
     #非极大值抑制
     for part in range(18):
         map_ori = heatmap_avg[:, :, part]
-        map = gaussian_filter(map_ori, sigma=3)
+        map = gaussian_filter(map_ori, sigma=3) #高斯滤波，去除噪声
 
         map_left = np.zeros(map.shape)
-        map_left[1:, :] = map[:-1, :]
+        map_left[1:, :] = map[:-1, :] #将所有坐标向下移动一行，原作者命名有问题
         map_right = np.zeros(map.shape)
-        map_right[:-1, :] = map[1:, :]
+        map_right[:-1, :] = map[1:, :] #将所有坐标向上移动一行
         map_up = np.zeros(map.shape)
-        map_up[:, 1:] = map[:, :-1]
+        map_up[:, 1:] = map[:, :-1] #将所有坐标向向右移动一列
         map_down = np.zeros(map.shape)
-        map_down[:, :-1] = map[:, 1:]
+        map_down[:, :-1] = map[:, 1:] #将所有坐标向左移动一列
 
         #当前像素值必须大于上下左右的像素值
         peaks_binary = np.logical_and.reduce(
             (map >= map_left, map >= map_right, map >= map_up, map >= map_down, map > params['thre1'])) #参数thre1=0.1
-        peaks = list(zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0]))  # note reverse
-        peaks_with_score = [x + (map_ori[x[1], x[0]],) for x in peaks] #获得peaks的坐标（width,heigh,score）
+        peaks = list(zip(np.nonzero(peaks_binary)[1], np.nonzero(peaks_binary)[0]))  # note reverse #返回坐标(列，行)
+        peaks_with_score = [x + (map_ori[x[1], x[0]],) for x in peaks] #获得peaks的坐标（列,行,score）
         id = range(peak_counter, peak_counter + len(peaks))
-        peaks_with_score_and_id = [peaks_with_score[i] + (id[i],) for i in range(len(id))]
+        peaks_with_score_and_id = [peaks_with_score[i] + (id[i],) for i in range(len(id))] #给关键点编号
 
         all_peaks.append(peaks_with_score_and_id)
         peak_counter += len(peaks)
 
-    connection_all = []
-    special_k = []
-    mid_num = 10
+    connection_all = [] #所有19种连接方式，每种连接按照贪婪方法配对
+    special_k = [] #特殊情况，没有检测到某一类关键点
+    mid_num = 10 
 
     for k in range(len(mapIdx)):
         score_mid = paf_avg[:, :, [x - 19 for x in mapIdx[k]]] #得到score_imd.shape=[height,width,2]
-        candA = all_peaks[limbSeq[k][0] - 1]
+        candA = all_peaks[limbSeq[k][0] - 1] #列，行
         candB = all_peaks[limbSeq[k][1] - 1]
         nA = len(candA)
         nB = len(candB)
-        indexA, indexB = limbSeq[k]
+        indexA, indexB = limbSeq[k] #得到两个关键点
         if (nA != 0 and nB != 0):
             connection_candidate = []
-            for i in range(nA):
+            for i in range(nA): #两幅图中，所有的A类关键点和B类关键点尝试连接
                 for j in range(nB):
-                    vec = np.subtract(candB[j][:2], candA[i][:2]) #两个关键点之间的向量
+                    vec = np.subtract(candB[j][:2], candA[i][:2]) #尝试连接两个关键点之间的向量
                     norm = math.sqrt(vec[0] * vec[0] + vec[1] * vec[1])
                     # failure case when 2 body parts overlaps
                     if norm == 0:
@@ -136,45 +137,45 @@ def process (input_image, params, model_params):
                     startend = list(zip(np.linspace(candA[i][0], candB[j][0], num=mid_num), \
                                    np.linspace(candA[i][1], candB[j][1], num=mid_num)))
 
-                    vec_x = np.array(
+                    vec_x = np.array( #获取两个关键点连线上10个中间点的paf值dx ；列
                         [score_mid[int(round(startend[I][1])), int(round(startend[I][0])), 0] \
                          for I in range(len(startend))])
-                    vec_y = np.array(
+                    vec_y = np.array( #获取两个关键点连线上10个中间点的paf值dy ；行
                         [score_mid[int(round(startend[I][1])), int(round(startend[I][0])), 1] \
                          for I in range(len(startend))])
 
-                    score_midpts = np.multiply(vec_x, vec[0]) + np.multiply(vec_y, vec[1])
+                    score_midpts = np.multiply(vec_x, vec[0]) + np.multiply(vec_y, vec[1]) #向量点乘,余弦相似度
                     score_with_dist_prior = sum(score_midpts) / len(score_midpts) + min(
                         0.5 * oriImg.shape[0] / norm - 1, 0)
                     criterion1 = len(np.nonzero(score_midpts > params['thre2'])[0]) > 0.8 * len(
-                        score_midpts)
+                        score_midpts) #80%的向量乘积大于阈值thre2=0.05
                     criterion2 = score_with_dist_prior > 0
                     if criterion1 and criterion2:
                         connection_candidate.append([i, j, score_with_dist_prior,
                                                      score_with_dist_prior + candA[i][2] + candB[j][2]])
-
-            connection_candidate = sorted(connection_candidate, key=lambda x: x[2], reverse=True)
-            connection = np.zeros((0, 5))
+            #对匹配好的关键点对进行筛选，依据score_with_dist_prior从大到小排序
+            connection_candidate = sorted(connection_candidate, key=lambda x: x[2], reverse=True) 
+            connection = np.zeros((0, 5)) #关键点编号1，编号2，分数，i,j
             for c in range(len(connection_candidate)):
                 i, j, s = connection_candidate[c][0:3]
-                if (i not in connection[:, 3] and j not in connection[:, 4]):
+                if (i not in connection[:, 3] and j not in connection[:, 4]): #如果已经由匹配了，则不再匹配；这里按照贪婪方法
                     connection = np.vstack([connection, [candA[i][3], candB[j][3], s, i, j]])
                     if (len(connection) >= min(nA, nB)):
                         break
 
             connection_all.append(connection)
-        else:
+        else: #没有检测到关键点
             special_k.append(k)
             connection_all.append([])
 
     # last number in each row is the total parts number of that person
     # the second last number in each row is the score of the overall configuration
     subset = -1 * np.ones((0, 20))
-    candidate = np.array([item for sublist in all_peaks for item in sublist])
+    candidate = np.array([item for sublist in all_peaks for item in sublist]) #将检测到的所有关键点展开
     #匈牙利匹配算法
     for k in range(len(mapIdx)):
         if k not in special_k:
-            partAs = connection_all[k][:, 0]
+            partAs = connection_all[k][:, 0] #获取第k种连接方式的关键点编号
             partBs = connection_all[k][:, 1]
             indexA, indexB = np.array(limbSeq[k]) - 1
 
@@ -216,7 +217,7 @@ def process (input_image, params, model_params):
                     subset = np.vstack([subset, row])
 
     # delete some rows of subset which has few parts occur
-    deleteIdx = [];
+    deleteIdx = []
     for i in range(len(subset)):
         if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
             deleteIdx.append(i)
@@ -230,8 +231,8 @@ def process (input_image, params, model_params):
     stickwidth = 4
 
     #绘制关键点之间的连接
-    for i in range(17):
-        for n in range(len(subset)):
+    for i in range(17): 
+        for n in range(len(subset)): #第n个人的关键点绘图，subset保存了n个人的18关键点连接的另一关键点编号
             index = subset[n][np.array(limbSeq[i]) - 1]
             if -1 in index:
                 continue
@@ -252,16 +253,16 @@ def process (input_image, params, model_params):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--image', type=str, default='sample_images/ski.jpg', help='input image') #required=True
+    parser.add_argument('--image', type=str, default='sample_images/visionteam1.jpg', help='input image') #required=True
     parser.add_argument('--output', type=str, default='result.png', help='output image')
-    parser.add_argument('--model', type=str, default='model/keras/model.h5', help='path to the weights file')
+    parser.add_argument('--model', type=str, default='model/keras/model.h5', help='path to the weights file') #model/keras/model.h5
 
     args = parser.parse_args()
     input_image = args.image
     output = args.output
     keras_weights_file = args.model
 
-    tic = time.time()
+    
     print('start processing...')
 
     # load model
@@ -269,11 +270,16 @@ if __name__ == '__main__':
     # authors of original model don't use
     # vgg normalization (subtracting mean) on input images
     model = get_testing_model(GPU=True)
+
+    if False: # if model.h5 is trained on multi GPU
+        from keras.utils import training_utils
+        model = training_utils.multi_gpu_model(model,gpus=2)
     model.load_weights(keras_weights_file)
 
     # load config
     params, model_params = config_reader()
 
+    tic = time.time()
     # generate image with body parts
     canvas = process(input_image, params, model_params)
 
@@ -283,9 +289,9 @@ if __name__ == '__main__':
     cv2.imwrite(output, canvas)
 
     # cv2.destroyAllWindows()
-    import matplotlib
-    import pylab as plt
-    f,axarr=plt.subplots(1,2)
-    axarr.flat[0].imshow()
+    # import matplotlib
+    # import pylab as plt
+    # f,axarr=plt.subplots(1,2)
+    # axarr.flat[0].imshow()
 
 

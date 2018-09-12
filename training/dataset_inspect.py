@@ -1,3 +1,4 @@
+#encoding=utf-8
 import os
 import sys
 import cv2
@@ -142,8 +143,10 @@ def build_debug_sample(components):
 if __name__ == '__main__':
     batch_size = 10
     curr_dir = os.path.dirname(__file__)
-    annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_val2017.json')
-    img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/val2017/'))
+    # annot_path = os.path.join(curr_dir, '../dataset/annotations/person_keypoints_val2017.json')
+    # img_dir = os.path.abspath(os.path.join(curr_dir, '../dataset/val2017/'))
+    annot_path="/media/han/E/mWork/datasets/COCO2014/annotations/person_keypoints_val2014.json"
+    img_dir='/media/han/E/mWork/datasets/COCO2014/val2014/'
     df = CocoDataFlow((368, 368), annot_path, img_dir)#, select_ids=[1000])
     df.prepare()
     df = MapData(df, read_img)
@@ -158,4 +161,4 @@ if __name__ == '__main__':
 
     for g in gen:
         show_image_mask_center_of_main_person(g)
-        #show_image_heatmap_paf(g)
+        show_image_heatmap_paf(g)

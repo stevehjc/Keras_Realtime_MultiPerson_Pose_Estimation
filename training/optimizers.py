@@ -3,7 +3,7 @@ from keras import backend as K
 from keras.legacy import interfaces
 
 
-class MultiSGD(Optimizer):
+class MultiSGD(Optimizer): #自定义的优化器，重载keras的Optimizer类
     """
     Modified SGD with added support for learning multiplier for kernels and biases
     as suggested in: https://github.com/fchollet/keras/issues/5920

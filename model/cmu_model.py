@@ -35,6 +35,7 @@ def vgg_block(x, weight_decay):
     '''
     vgg19模型的前10层，再加两层卷积
     网络中存在3个最大池化层，因此网络输出相比输入缩小了8倍
+    :param weight_decay:卷积层权重的正则化参数
     '''
     # Block 1
     x = conv(x, 64, 3, "conv1_1", (weight_decay, 0))
